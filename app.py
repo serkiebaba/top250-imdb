@@ -1,14 +1,23 @@
-import csv, os
+import os, csv
 from flask import Flask, jsonify
+from flask_cors import CORS  # <- CORS toevoegen
 
+# ===== Config =====
 APP_NAME = "TOP 250 FILMS (IMDB)"
 CATALOG_ID = "top250films"
 CATALOG_TYPE = "movie"
-CSV_PATH = os.path.join("data", "imdb_top250.csv")
 
+# Gebruik CSV in /data/ als die bestaat, anders die in de root
+CSV_PATH = "data/imdb_top250.csv" if os.path.exists("data/imdb_top250.csv") else "imdb_top250.csv"
+
+# ===== App =====
+app = Flask(__name__)
+CORS(app)  # <- CORS aanzetten (lost “Failed to fetch” op)
+
+# ===== CSV inlezen =====
 def load_metas():
     metas = []
-    with open("imdb_top250.csv", encoding="utf-8-sig") as f:
+    with open(CSV_PATH, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             url = row.get("URL", "")
@@ -19,10 +28,10 @@ def load_metas():
                 "id": imdb_id,
                 "type": CATALOG_TYPE,
                 "name": row.get("Title", ""),
-                "year": int(row["Year"]) if row.get("Year","").isdigit() else None,
+                "year": int(row["Year"]) if row.get("Year", "").isdigit() else None,
                 "poster": row.get("Poster", "") or None,
-                "genres": [g.strip() for g in row.get("Genres","").split(",") if g.strip()],
-                "description": row.get("Description","")[:500]
+                "genres": [g.strip() for g in row.get("Genres", "").split(",") if g.strip()],
+                "description": (row.get("Description", "") or "")[:500],
             })
     return metas
 
@@ -37,10 +46,8 @@ manifest = {
     "types": [CATALOG_TYPE],
     "catalogs": [
         {"type": CATALOG_TYPE, "id": CATALOG_ID, "name": APP_NAME}
-    ]
+    ],
 }
-
-app = Flask(__name__)
 
 @app.route("/manifest.json")
 def serve_manifest():
@@ -52,7 +59,11 @@ def serve_catalog():
 
 @app.route("/")
 def root():
-    return jsonify({"ok": True, "tip": "Gebruik /manifest.json in Stremio"})
+    return jsonify({
+        "ok": True,
+        "csv_path": CSV_PATH,
+        "tip": "Gebruik /manifest.json in Stremio"
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
