@@ -1,18 +1,17 @@
 import os, csv
-from flask import Flask, jsonify
-from flask_cors import CORS  # <- CORS toevoegen
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 # ===== Config =====
 APP_NAME = "TOP 250 FILMS (IMDB)"
 CATALOG_ID = "top250films"
 CATALOG_TYPE = "movie"
+PAGE_SIZE = 50  # <- aantal items per “pagina” (50 = 3 kliks naar ~150)
 
-# Gebruik CSV in /data/ als die bestaat, anders die in de root
 CSV_PATH = "data/imdb_top250.csv" if os.path.exists("data/imdb_top250.csv") else "imdb_top250.csv"
 
-# ===== App =====
 app = Flask(__name__)
-CORS(app)  # <- CORS aanzetten (lost “Failed to fetch” op)
+CORS(app)
 
 # ===== CSV inlezen =====
 def load_metas():
@@ -45,23 +44,41 @@ manifest = {
     "resources": ["catalog"],
     "types": [CATALOG_TYPE],
     "catalogs": [
-        {"type": CATALOG_TYPE, "id": CATALOG_ID, "name": APP_NAME}
-    ],
+        {
+            "type": CATALOG_TYPE,
+            "id": CATALOG_ID,
+            "name": APP_NAME,
+            # heel belangrijk: vertel Stremio dat ‘skip’ ondersteund is (paging)
+            "extraSupported": ["skip"]
+        }
+    ]
 }
 
 @app.route("/manifest.json")
 def serve_manifest():
     return jsonify(manifest)
 
+@app.route(f"/catalog/{{type}}/{{id}}.json")
+def serve_catalog_dynamic(type, id):
+    # Stremio kan /catalog/movie/top250films.json?skip=100 aanroepen
+    if type != CATALOG_TYPE or id != CATALOG_ID:
+        return jsonify({"metas": []})
+    skip = request.args.get("skip", default=0, type=int)
+    slice_ = METAS[skip: skip + PAGE_SIZE]
+    has_more = (skip + PAGE_SIZE) < len(METAS)
+    return jsonify({"metas": slice_, "hasMore": has_more})
+
+# behoud ook de ‘oude’ route voor compatibiliteit
 @app.route(f"/catalog/{CATALOG_TYPE}/{CATALOG_ID}.json")
-def serve_catalog():
-    return jsonify({"metas": METAS})
+def serve_catalog_legacy():
+    return serve_catalog_dynamic(CATALOG_TYPE, CATALOG_ID)
 
 @app.route("/")
 def root():
     return jsonify({
         "ok": True,
         "csv_path": CSV_PATH,
+        "page_size": PAGE_SIZE,
         "tip": "Gebruik /manifest.json in Stremio"
     })
 
