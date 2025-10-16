@@ -8,7 +8,7 @@ CSV_PATH = os.path.join("data", "imdb_top250.csv")
 
 def load_metas():
     metas = []
-    with open(CSV_PATH, encoding="utf-8-sig") as f:
+    with open("imdb_top250.csv", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
         for row in reader:
             url = row.get("URL", "")
